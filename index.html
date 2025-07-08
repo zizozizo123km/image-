@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>🎨 Gemini - تعديل صورتك لتشبه أخرى</title>
+  <style>
+    body {
+      font-family: 'Tahoma', sans-serif;
+      background: linear-gradient(to bottom, #f0f4f8, #dbe9f4);
+      text-align: center;
+      padding: 30px;
+      direction: rtl;
+    }
+    h2 { color: #333; margin-bottom: 20px; }
+    .container {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      max-width: 500px;
+      margin: auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      text-align: right;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input[type="file"], textarea {
+      width: 100%;
+      margin-top: 5px;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    textarea { resize: vertical; }
+    button {
+      margin-top: 20px;
+      padding: 12px 20px;
+      font-size: 16px;
+      background-color: #2196f3;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #status {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #555;
+    }
+    #resultImage {
+      margin-top: 20px;
+      max-width: 100%;
+      border-radius: 10px;
+      border: 3px solid #ccc;
+    }
+    #downloadBtn {
+      display: none;
+      margin-top: 15px;
+      background-color: #4caf50;
+    }
+  </style>
+</head>
+<body>
+  <h2>✨ عدل صورتك لتشبه شخصًا آخر باستخدام Gemini</h2>
+
+  <div class="container">
+    <input type="hidden" id="apiKey" value="AIzaSyAASq5cVPahYB7WZ185NlZsXT9jvTBp1wo">
+
+    <label>🧍 صورتك الشخصية:</label>
+    <input type="file" id="yourImage" accept="image/*">
+
+    <label>🎯 صورة الشخص الذي تريد أن تشبهه (اختياري):</label>
+    <input type="file" id="targetImage" accept="image/*">
+
+    <label>✍️ أو صف من تريد أن تشبه (مثال: Cristiano Ronaldo smiling in a suit):</label>
+    <textarea id="prompt" rows="3">make me look like the second pictures.</textarea>
+
+    <button id="sendBtn">🚀 إرسال الطلب</button>
+    <div id="status"></div>
+
+    <img id="resultImage" alt="الصورة المعدلة ستظهر هنا">
+    <br>
+    <button id="downloadBtn">📥 تنزيل الصورة</button>
+  </div>
+
+  <script>
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const yourImgInput = document.getElementById('yourImage');
+      const targetImgInput = document.getElementById('targetImage');
+      const prompt = document.getElementById('prompt').value.trim();
+      const status = document.getElementById('status');
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      if (!yourImgInput.files[0]) {
+        alert('يرجى اختيار صورتك الشخصية!');
+        return;
+      }
+
+      status.textContent = '📥 تحويل الصور إلى Base64...';
+      downloadBtn.style.display = 'none';
+
+      const toBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+
+      try {
+        const yourImageBase64 = await toBase64(yourImgInput.files[0]);
+        const mimeType = yourImgInput.files[0].type || 'image/jpeg';
+
+        const parts = [{ text: prompt }, { inline_data: { mime_type: mimeType, data: yourImageBase64 } }];
+
+        if (targetImgInput.files[0]) {
+          const targetImageBase64 = await toBase64(targetImgInput.files[0]);
+          parts.push({ inline_data: { mime_type: mimeType, data: targetImageBase64 } });
+        }
+
+        status.textContent = '🚀 إرسال الطلب إلى Gemini...';
+
+        const res = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=' + apiKey,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts }],
+              generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+            })
+          });
+
+        const json = await res.json();
+        console.log(json);
+
+        const partsRes = json?.candidates?.[0]?.content?.parts || [];
+        const imagePart = partsRes.find(p => p.inlineData || p.inline_data);
+        if (!imagePart) throw new Error('❌ لم يتم استلام صورة من Gemini');
+
+        const out64   = imagePart.inlineData?.data    || imagePart.inline_data?.data;
+        const outMime = imagePart.inlineData?.mimeType || imagePart.inline_data?.mime_type || 'image/png';
+
+        const imgDataUrl = `data:${outMime};base64,${out64}`;
+        document.getElementById('resultImage').src = imgDataUrl;
+
+        downloadBtn.onclick = () => {
+          const link = document.createElement('a');
+          link.href = imgDataUrl;
+          link.download = 'ge.png';
+          link.click();
+        };
+        downloadBtn.style.display = 'inline-block';
+        status.textContent = '✅ تم التعديل! يمكنك الآن تنزيل الصورة.';
+      } catch (err) {
+        console.error(err);
+        status.textContent = '⚠️ خطأ: ' + err.message;
+      }
+    });
+  </script>
+</body>
+  </html>
